@@ -318,6 +318,7 @@ class InstallCommand(object):
 				print("(error) Already installed. Cannot install same file.")
 			else:
 				shutil.copy2(source_file_path, target_file_path)
+				os.chmod(target_file_path, os.stat(target_file_path).st_mode | stat.S_IEXEC)
 				print("(result) Successfully installed. Now you can access the CLI using # userapp-cli")
 		except Exception, e:
 			print("(error) Error installing CLI. Please verify that you are sudo/have permissions to /usr/local/bin.")
