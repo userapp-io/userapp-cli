@@ -1,18 +1,91 @@
 #!/usr/bin/env python
 
+import urllib
+import zipfile
 import shutil
 import json
+import subprocess
 import sys, os, stat
 import readline
 import ConfigParser
 import userapp
 import getpass
 import webbrowser
+import tempfile
 
 class ConsoleHelper(object):
 	@staticmethod
 	def clear_console():
 		os.system(['clear','cls'][os.name == 'nt'])
+
+class WebBrowserHelper(object):
+	@staticmethod
+	def open_url(url):
+		# Redirect stdout to devnull in order to avoid output from browser
+		savout = os.dup(1)
+		os.close(1)
+		os.open(os.devnull, os.O_RDWR)
+
+		try:
+			webbrowser.open(url)
+		finally:
+		   os.dup2(savout, 1)
+
+class ProcessHelper(object):
+	@staticmethod
+	def execute(args, wait=True, block=True, cwd=None):
+		print(cwd)
+
+		if block:
+			process = subprocess.Popen(args, shell=True, stdout=subprocess.PIPE, cwd=cwd)
+		else:
+			process = subprocess.Popen(args, shell=True, cwd=cwd)
+
+		if wait:
+			process.wait()
+
+		return process.returncode
+
+class FileHelper(object):
+	@staticmethod
+	def unzip_url(source_url, target_dir):
+		"""
+		Download an unzip and url in a target directory. Returns None if successful.
+		"""
+		if not os.path.exists(target_dir):
+			os.makedirs(target_dir)
+
+		name = os.path.join(target_dir, 'stage.tmp')
+		
+		try:
+			name, hdrs = urllib.urlretrieve(source_url, name)
+		except IOError, e:
+			return 'invalid_url'
+
+		try:
+			with zipfile.ZipFile(name) as handle:
+				handle.extractall(target_dir)
+
+			os.unlink(name)
+		except zipfile.error, e:
+			return 'invalid_zip'
+
+		return None
+
+	@staticmethod
+	def search_replace_file(file_path, pattern, replace_with):
+		fh, abs_path = tempfile.mkstemp()
+
+		with open(abs_path,'w') as new_file:
+			with open(file_path) as old_file:
+				for line in old_file:
+					if pattern in line:
+						line=line.replace(pattern, replace_with)
+					new_file.write(line)
+
+		os.close(fh)
+		os.remove(file_path)
+		shutil.move(abs_path, file_path)
 
 class ServiceLocator(object):
 	_instance=None
@@ -136,6 +209,8 @@ class CliCommandFactory(object):
 				command=ClearConsoleCommand()
 			elif command_type == 'config':
 				command=ConfigCommand(arguments)
+			elif command_type == 'init':
+				command=InitCommand(arguments)
 			elif command_type == 'profile':
 				command=ProfileCommand(arguments)
 			elif command_type == 'login':
@@ -149,8 +224,6 @@ class CliCommandFactory(object):
 					command=UserAppApiCallCommand(arguments)
 			elif command_type == 'dashboard':
 				command=UserAppDashboardLaunchCommand()
-			elif command_type == 'install':
-				command=InstallCommand()
 			elif command_type == 'help':
 				command=HelpCommand()
 
@@ -185,7 +258,9 @@ class UserAppApiCallCommand(object):
 		profile=self.config.get_selected_profile()
 
 		if profile['user']['token'] is None:
-			print("(info) Not authenticated. Please login as user " + profile['user']['login'] + '.')
+			if profile['user']['login'] is None:
+				print("(info) Not authenticated. Please login" + ('' if profile['user']['login'] is None else ' login as user' + profile['user']['login']) + '.')
+			
 			UserAppLoginCommand([profile['user']['login']]).execute()
 
 		client=userapp.Client(
@@ -305,22 +380,71 @@ class ConfigCommand(object):
 		else:
 			print("(error) Please specify a command (list, get, set or save).")
 
-class InstallCommand(object):
-	def __init__(self):
-		pass
+class InitCommand(object):
+	"""
+	Currently a bit hacked together. Will have to deal \w all types of backends/frontends in the future.
+	"""
+	def __init__(self, arguments):
+		service_locator=ServiceLocator.get_instance()
+		self.config=service_locator.resolve('config')
+		self.cli_context=service_locator.resolve('cli_context')
+		self.arguments=arguments
 
 	def execute(self):
-		try:
-			source_file_path=os.path.abspath(sys.modules['__main__'].__file__)
-			target_file_path='/usr/local/bin/userapp-cli'
+		arguments=self.arguments
 
-			if source_file_path == target_file_path:
-				print("(error) Already installed. Cannot install same file.")
-			else:
-				shutil.copy2(source_file_path, target_file_path)
-				print("(result) Successfully installed. Now you can access the CLI using # userapp-cli")
-		except Exception, e:
-			print("(error) Error installing CLI. Please verify that you are sudo/have permissions to /usr/local/bin.")
+		current_dir_path=os.getcwd()
+		profile=self.config.get_selected_profile()
+
+		def inject_app_id(file_path):
+			FileHelper.search_replace_file(file_path, 'YOUR-USERAPP-APP-ID', profile['user']['app_id'])
+
+		if profile['user']['token'] is None:
+			if profile['user']['login'] is None:
+				print("(info) Not authenticated. Please login" + ('' if profile['user']['login'] is None else ' login as user' + profile['user']['login']) + '.')
+			
+			UserAppLoginCommand([profile['user']['login']]).execute()
+			profile=self.config.get_selected_profile()
+
+		if len(arguments) > 1:
+			app_name=arguments.pop(0)
+
+			target_dir_path=current_dir_path+'/'+app_name
+
+			if not os.path.exists(target_dir_path):
+				os.makedirs(target_dir_path)
+
+			frontend=arguments.pop(0)
+
+			frontend_zip_url='https://app.userapp.io/partials/docs/quickstart/{name}/frontend/userapp-{name}-demo.zip'
+			backend_zip_url='https://app.userapp.io/partials/docs/quickstart/{name}/backend/userapp-{name}-backend.zip'
+
+			frontend_error = FileHelper.unzip_url(frontend_zip_url.format(name=frontend), target_dir_path + '/public')
+
+			if frontend_error == 'invalid_url':
+				print("(error) Frontend '"+frontend+"' does not exist.")
+				return
+
+			if frontend == 'angularjs':
+				inject_app_id(target_dir_path + '/public/js/app.js')
+
+			if len(arguments) > 0:
+				backend=arguments.pop(0)
+				backend_error = FileHelper.unzip_url(backend_zip_url.format(name=backend), target_dir_path)
+
+				if backend_error == 'invalid_url':
+					print("(error) Backend '"+backend+"' does not exist.")
+					return
+
+				if backend == 'nodejs':
+					inject_app_id(target_dir_path + '/app.js')
+
+					ProcessHelper.execute('sudo npm install', cwd=target_dir_path+'/')
+					ProcessHelper.execute('nodejs app.js', block=False, wait=False, cwd=target_dir_path+'/')
+
+					WebBrowserHelper.open_url('http://localhost:3000')
+		else:
+			print("(error) Please specify <dir name> <frontend> <backend>. E.g. 'init myapp angularjs nodejs'.")
 
 class ProfileCommand(object):
 	def __init__(self, arguments):
@@ -430,8 +554,11 @@ class UserAppDashboardLaunchCommand(object):
 		profile=self.config.get_selected_profile()
 		
 		if profile['user']['token'] is None:
-			print("(info) Not authenticated. Please login as user " + profile['user']['login'] + '.')
+			if profile['user']['login'] is None:
+				print("(info) Not authenticated. Please login" + ('' if profile['user']['login'] is None else ' login as user' + profile['user']['login']) + '.')
+			
 			UserAppLoginCommand([profile['user']['login']]).execute()
+			profile=self.config.get_selected_profile()
 
 		api=userapp.API(
 			app_id=USERAPP_MASTER_APP_ID,
@@ -448,15 +575,7 @@ class UserAppDashboardLaunchCommand(object):
 
 			print("(result) Launching dashboard...")
 
-			# Redirect stdout to devnull in order to avoid output from browser
-			savout = os.dup(1)
-			os.close(1)
-			os.open(os.devnull, os.O_RDWR)
-
-			try:
-				webbrowser.open('https://app.userapp.io/#/?ua_token='+str(login_result.token))
-			finally:
-			   os.dup2(savout, 1)
+			WebBrowserHelper.open_url('https://app.userapp.io/#/?ua_token='+str(login_result.token))
 		except Exception, e:
 			print("(error) " + str(e.message))
 
@@ -636,9 +755,6 @@ class CliContext(object):
 
 	def is_interactive(self):
 		return self.interactive
-
-if not os.geteuid() == 0:
-    sys.exit('(error) This script requires root.')
 
 USERAPP_MASTER_APP_ID='51ded0be98035'
 
