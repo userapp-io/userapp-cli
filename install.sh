@@ -11,7 +11,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 pip install userapp > /dev/null
 
-cp $SCRIPT_DIR/userapp-cli.py $BIN_PATH
+cp $SCRIPT_DIR/src/userapp-cli.py $BIN_PATH
 chmod +x $BIN_PATH
 
 if [ ! -d $CONFIG_DIR_PATH ] ; then
