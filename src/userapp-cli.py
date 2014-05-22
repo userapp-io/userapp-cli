@@ -393,6 +393,7 @@ class InitCommand(object):
 	def execute(self):
 		arguments=self.arguments
 
+<<<<<<< HEAD
 		current_dir_path=os.getcwd()
 		profile=self.config.get_selected_profile()
 
@@ -445,6 +446,16 @@ class InitCommand(object):
 					WebBrowserHelper.open_url('http://localhost:3000')
 		else:
 			print("(error) Please specify <dir name> <frontend> <backend>. E.g. 'init myapp angularjs nodejs'.")
+=======
+			if source_file_path == target_file_path:
+				print("(error) Already installed. Cannot install same file.")
+			else:
+				shutil.copy2(source_file_path, target_file_path)
+				os.chmod(target_file_path, os.stat(target_file_path).st_mode | stat.S_IEXEC)
+				print("(result) Successfully installed. Now you can access the CLI using # userapp-cli")
+		except Exception, e:
+			print("(error) Error installing CLI. Please verify that you are sudo/have permissions to /usr/local/bin.")
+>>>>>>> 472d52057f762b88b0afde8b8948583de35e13ce
 
 class ProfileCommand(object):
 	def __init__(self, arguments):
