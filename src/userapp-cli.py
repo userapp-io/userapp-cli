@@ -393,7 +393,6 @@ class InitCommand(object):
 	def execute(self):
 		arguments=self.arguments
 
-<<<<<<< HEAD
 		current_dir_path=os.getcwd()
 		profile=self.config.get_selected_profile()
 
