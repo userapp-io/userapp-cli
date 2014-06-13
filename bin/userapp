@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+
+# Copyright 2014 UserApp, Inc. or its affiliates. All Rights Reserved.
+
+import sys
+import userapp.cli.clidriver as clidriver
+ 
+def main():
+	return clidriver.main()
+
+if __name__ == '__main__':
+	sys.exit(main())
