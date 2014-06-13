@@ -1,199 +1,23 @@
-#!/usr/bin/env python
-
-import urllib
-import zipfile
-import shutil
-import json
-import subprocess
-import sys, os, stat
-import readline
-import ConfigParser
-import userapp
 import getpass
-import webbrowser
-import tempfile
+import userapp
+import json
 
-class ConsoleHelper(object):
-	@staticmethod
-	def clear_console():
-		os.system(['clear','cls'][os.name == 'nt'])
+from . import __userapp_master_app_id__
+from helper import ConsoleHelper
+from helper import FileHelper
+from core import ServiceLocator
 
-class WebBrowserHelper(object):
-	@staticmethod
-	def open_url(url):
-		# Redirect stdout to devnull in order to avoid output from browser
-		savout = os.dup(1)
-		os.close(1)
-		os.open(os.devnull, os.O_RDWR)
-
-		try:
-			webbrowser.open(url)
-		finally:
-		   os.dup2(savout, 1)
-
-class ProcessHelper(object):
-	@staticmethod
-	def execute(args, wait=True, block=True, cwd=None):
-		print(cwd)
-
-		if block:
-			process = subprocess.Popen(args, shell=True, stdout=subprocess.PIPE, cwd=cwd)
-		else:
-			process = subprocess.Popen(args, shell=True, cwd=cwd)
-
-		if wait:
-			process.wait()
-
-		return process.returncode
-
-class FileHelper(object):
-	@staticmethod
-	def unzip_url(source_url, target_dir):
-		"""
-		Download an unzip and url in a target directory. Returns None if successful.
-		"""
-		if not os.path.exists(target_dir):
-			os.makedirs(target_dir)
-
-		name = os.path.join(target_dir, 'stage.tmp')
-		
-		try:
-			name, hdrs = urllib.urlretrieve(source_url, name)
-		except IOError, e:
-			return 'invalid_url'
-
-		try:
-			with zipfile.ZipFile(name) as handle:
-				handle.extractall(target_dir)
-
-			os.unlink(name)
-		except zipfile.error, e:
-			return 'invalid_zip'
-
-		return None
-
-	@staticmethod
-	def search_replace_file(file_path, pattern, replace_with):
-		fh, abs_path = tempfile.mkstemp()
-
-		with open(abs_path,'w') as new_file:
-			with open(file_path) as old_file:
-				for line in old_file:
-					if pattern in line:
-						line=line.replace(pattern, replace_with)
-					new_file.write(line)
-
-		os.close(fh)
-		os.remove(file_path)
-		shutil.move(abs_path, file_path)
-
-class ServiceLocator(object):
-	_instance=None
-
+class CliCommandParser(object):
 	def __init__(self):
-		self.registry={}
+		pass
 
-	def register(self, name, object):
-		self.registry[name]=object
+	def parse(self, raw):
+		result = raw.split(' ')
 
-	def resolve(self, name):
-		return self.registry[name] if name in self.registry else None
+		if len(result) == 1 and len(result[0]) == 0:
+			result = []
 
-	@staticmethod
-	def get_instance():
-		if ServiceLocator._instance is None:
-			ServiceLocator._instance=ServiceLocator()
-
-		return ServiceLocator._instance
-
-class Configuration(object):
-	def __init__(self, selected_profile_name=None, profiles=None, file_path=None):
-		self.__file_path=file_path
-		self.selected_profile_name=selected_profile_name
-		self.profiles={} if profiles is None else profiles
-
-	@staticmethod
-	def parseBooleanString(value):
-		if isinstance(value, bool):
-			return value
-
-		if isinstance(value, basestring):
-			return value.lower() in ['true', '1', 'yes', 'on']
-
-		if isinstance(value, int):
-			return value == 1
-
-		return False
-
-	def load(self):
-		try:
-			with open(self.__file_path, 'r') as handle:
-				self.profiles = json.load(handle)['profiles']
-		except:
-			self.profiles={}
-
-	def save(self):
-		config_dir_path=os.path.dirname(self.__file_path)
-
-		if not os.path.exists(config_dir_path):
-			os.makedirs(config_dir_path)
-
-		with open(self.__file_path, 'w') as handle:
-			handle.write(str(self))
-
-	def has_profile(self, name):
-		return name in self.profiles
-
-	def get_profile(self, name):
-		if name in self.profiles:
-			return self.profiles[name]
-
-		new_profile=self.get_default_profile()
-		self.profiles[name]=new_profile
-
-		return new_profile
-
-	def set_selected_profile(self, name):
-		if self.has_profile(name):
-			self.selected_profile_name=name
-
-	def get_default_profile(self):
-		return {
-			'primary':True,
-			'user':{
-				'app_id':None,
-				'token':None,
-				'login':None,
-				'password':None
-			},
-			'server':{
-				'base_address':'api.userapp.io',
-				'secure':True,
-				'debug':False
-			}
-		}
-
-	def get_primary_profile(self):
-		for (name, profile) in self.profiles.items():
-			if profile['primary']:
-				return profile
-
-		return self.get_default_profile()
-
-	def get_selected_profile(self):
-		if self.selected_profile_name is None:
-			return self.get_primary_profile()
-
-		if self.selected_profile_name in self.profiles:
-			return self.profiles[self.selected_profile_name]
-
-		return self.get_default_profile()
-
-	def __str__(self):
-		return json.dumps({'profiles':self.profiles}, sort_keys=True, indent=4)
-
-	def __repr__(self):
-		return str(self)
+		return result
 
 class CliCommandFactory(object):
 	def __init__(self):
@@ -561,7 +385,7 @@ class UserAppDashboardLaunchCommand(object):
 			profile=self.config.get_selected_profile()
 
 		api=userapp.API(
-			app_id=USERAPP_MASTER_APP_ID,
+			app_id=__userapp_master_app_id__,
 			secure=profile['server']['secure'],
 			base_address=profile['server']['base_address'],
 			debug=profile['server']['debug']
@@ -608,7 +432,7 @@ class UserAppLoginCommand(object):
 		profile=self.config.get_selected_profile()
 
 		api=userapp.API(
-			app_id=USERAPP_MASTER_APP_ID,
+			app_id=__userapp_master_app_id__,
 			secure=profile['server']['secure'],
 			base_address=profile['server']['base_address'],
 			debug=profile['server']['debug']
@@ -647,8 +471,6 @@ class UserAppLoginCommand(object):
 				self.config.save()
 
 		except Exception, e:
-			print(e.__dict__)
-			print(e)
 			print("(error) " + str(e.message))
 
 class UserAppRegisterCommand(object):
@@ -720,82 +542,3 @@ class NopCommand(object):
 
 	def execute(self):
 		pass
-
-class CliCommandParser(object):
-	def __init__(self):
-		pass
-
-	def parse(self, raw):
-		result = raw.split(' ')
-
-		if len(result) == 1 and len(result[0]) == 0:
-			result = []
-
-		return result
-
-class CliContext(object):
-	def __init__(self):
-		self.interactive=False
-		self.scopes=[]
-
-	def enter(self, scope):
-		self.scopes.append(scope)
-
-	def exit(self):
-		return self.scopes.pop() if len(self.scopes) > 0 else None
-
-	def get_scopes(self):
-		return self.scopes
-
-	def in_scope(self, scope):
-		return self.scopes[len(self.scopes)-1] == scope if len(self.scopes) > 0 else False
-
-	def set_interactive(self, mode):
-		self.interactive=mode
-
-	def is_interactive(self):
-		return self.interactive
-
-USERAPP_MASTER_APP_ID='51ded0be98035'
-
-cli_context=CliContext()
-
-config=Configuration(file_path='/etc/userapp/config.json')
-config.load()
-
-service_locator=ServiceLocator.get_instance()
-service_locator.register('config', config)
-service_locator.register('cli_context', cli_context)
-
-command_factory=CliCommandFactory()
-
-if len(sys.argv) == 1:
-	ConsoleHelper.clear_console()
-
-	cli_context.set_interactive(True)
-
-	parser=CliCommandParser()
-
-	while True:
-		try:
-			cli_scopes=cli_context.get_scopes()
-
-			line=raw_input("userapp" + (' ' + (':'.join(cli_scopes)) if len(cli_scopes) > 0 else '') + "> ")
-
-			arguments=parser.parse(line)
-
-			command=command_factory.create(cli_scopes + arguments)
-			command.execute()
-		except KeyboardInterrupt:
-			print(" ")
-			if cli_context.exit() is None:
-				break
-else:
-	try:
-		arguments=sys.argv
-		arguments.pop(0)
-
-		command=command_factory.create(arguments)
-		command.execute()
-	except KeyboardInterrupt:
-		print(" ")
