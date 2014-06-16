@@ -1,18 +1,23 @@
 #!/usr/bin/env python
-import sys
+import os, sys
 
+from userapp.cli import __version__
 from setuptools import setup, find_packages
+
+def read_file(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup_options = dict(
     name='userapp-cli',
-    version='1.0.0',
+    version=__version__,
     description='Universal Command Line Environment for UserApp.',
-    long_description=open('README.md').read(),
+    long_description=read_file('README.md'),
     author='Robin Orheden',
     author_email='robin.orheden@userapp.io',
     keywords='userapp cli',
     url='https://github.com/userapp-io/userapp-cli/',
     scripts=['bin/userapp'],
+    zip_safe = False,
     namespace_packages = ['userapp'],
     packages=find_packages(exclude=['examples', 'tests']),
     install_requires=['setuptools', 'userapp', 'requests'],
