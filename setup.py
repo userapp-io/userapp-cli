@@ -48,5 +48,4 @@ if 'py2exe' in sys.argv:
         }
     }
 
-
 setup(**setup_options)

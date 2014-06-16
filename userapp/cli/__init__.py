@@ -6,7 +6,7 @@ USERAPP-CLI
 A Universal Command Line Environment for UserApp.
 """
 
-__version__ = '1.0.2'
+__version__ = '1.0.0'
 __userapp_master_app_id__='51ded0be98035'
 
 import os
