@@ -1,4 +1,8 @@
+import os
 import sys
+import atexit
+import readline
+import rlcompleter
 
 from core import Configuration
 from core import ServiceLocator
@@ -31,6 +35,17 @@ class CliContext(object):
 
 def main():
 	cli_context=CliContext()
+
+	historyPath = os.path.expanduser("~/.uahistory")
+
+	def save_history(historyPath=historyPath):
+	    import readline
+	    readline.write_history_file(historyPath)
+
+	if os.path.exists(historyPath):
+	    readline.read_history_file(historyPath)
+
+	atexit.register(save_history)
 
 	config=Configuration(file_path='/etc/userapp/config.json')
 	config.load()
